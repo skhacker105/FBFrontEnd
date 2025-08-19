@@ -1,7 +1,7 @@
 <div class="homepage-container">
     <!-- Header (Desktop/Tablet: Includes module links; Mobile: Basic) -->
     <header class="header">
-      <div class="logo">Business Hub</div>
+      <div class="logo">{{appService.title}}</div>
       <nav class="nav-links desktop-tablet-nav" *ngIf="!isMobileView">
         <a (click)="navigateToAbout()" class="link">About Us</a>
         <div *ngFor="let module of modules" class="dropdown">
@@ -25,7 +25,7 @@
     <!-- Main Content -->
     <main class="main-content">
       <section class="hero-section text-center">
-        <h1>Welcome to Business Hub</h1>
+        <h1>Welcome to {{appService.title}}</h1>
         <p>Your all-in-one platform to manage every aspect of your business efficiently.</p>
         <button *ngIf="!isLoggedIn" class="btn btn-apply btn-large" (click)="toggleLogin()">Get Started - Login Now</button>
       </section>
@@ -45,32 +45,36 @@
     </main>
   
     <!-- Mobile Add Menu (Popup when Add icon clicked) -->
-    <div *ngIf="isLoggedIn && isMobileView && showAddMenu" class="popup add-menu">
-      <div class="popup-header">
-        <h3>Add Actions</h3>
-        <button class="close-btn btn btn-cancel" (click)="toggleAddMenu()">×</button>
-      </div>
-      <div class="popup-content">
-        <div *ngFor="let module of modules" class="add-subitem" (click)="navigateToModule(module.route + '/add')">
-          Add to {{ module.name }}
+    <div *ngIf="isLoggedIn && isMobileView && showAddMenu" class="popup-overlay" (click)="closePopup('add')">
+      <div class="popup add-menu" (click)="$event.stopPropagation()">
+        <div class="popup-header">
+          <h3>Add Actions</h3>
+          <button class="close-btn btn btn-cancel" (click)="toggleAddMenu()">×</button>
+        </div>
+        <div class="popup-content">
+          <div *ngFor="let module of modules" class="add-subitem" (click)="navigateToModule(module.route + '/add')">
+            Add to {{ module.name }}
+          </div>
         </div>
       </div>
     </div>
   
     <!-- Mobile Modules Menu (Popup when Modules icon clicked) -->
-    <div *ngIf="isLoggedIn && isMobileView && showModulesMenu" class="popup modules-menu">
-      <div class="popup-header">
-        <h3>Modules</h3>
-        <button class="close-btn btn btn-cancel" (click)="toggleModulesMenu()">×</button>
-      </div>
-      <div class="popup-content">
-        <div *ngFor="let module of modules" class="module-group">
-          <div class="module-header" (click)="navigateToModule(module.route)">
-            <img [src]="module.iconUrl" [alt]="module.name" class="sub-icon">
-            <span>{{ module.name }}</span>
-          </div>
-          <div *ngFor="let subLink of module.subLinks" class="sub-link" (click)="navigateToModule(subLink.route)">
-            {{ subLink.name }}
+    <div *ngIf="isLoggedIn && isMobileView && showModulesMenu" class="popup-overlay" (click)="closePopup('modules')">
+      <div class="popup modules-menu" (click)="$event.stopPropagation()">
+        <div class="popup-header">
+          <h3>Modules</h3>
+          <button class="close-btn btn btn-cancel" (click)="toggleModulesMenu()">×</button>
+        </div>
+        <div class="popup-content">
+          <div *ngFor="let module of modules" class="module-group">
+            <div class="module-header" (click)="navigateToModule(module.route)">
+              <img [src]="module.iconUrl" [alt]="module.name" class="sub-icon">
+              <span>{{ module.name }}</span>
+            </div>
+            <div *ngFor="let subLink of module.subLinks" class="sub-link" (click)="navigateToModule(subLink.route)">
+              {{ subLink.name }}
+            </div>
           </div>
         </div>
       </div>
@@ -79,7 +83,7 @@
     <!-- Footer (Mobile: Icons when logged in; Desktop/Tablet: Copyright) -->
     <footer class="footer">
       <div *ngIf="!isLoggedIn || !isMobileView" class="copyright">
-        <p>&copy; 2025 Business Hub. All rights reserved.</p>
+        <p>&copy; 2025 {{appService.title}}. All rights reserved.</p>
       </div>
       <div *ngIf="isLoggedIn && isMobileView" class="mobile-footer-icons">
         <div class="icon-item" (click)="navigateToModule('/')">

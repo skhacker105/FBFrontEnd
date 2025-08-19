@@ -141,4 +141,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.showAddMenu = !this.showAddMenu;
     this.showModulesMenu = false; // Close modules menu if open
   }
+
+  closePopup(popupType: 'add' | 'modules'): void {
+    if (popupType === 'add') {
+      this.showAddMenu = false;
+    } else {
+      this.showModulesMenu = false;
+    }
+  }
 }

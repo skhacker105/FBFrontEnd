@@ -246,19 +246,29 @@
     }
   }
 
+  .popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5); // Translucent black
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  }
+
   .add-menu,
   .modules-menu {
     background-color: var(--bg-color-popup);
     border: var(--border-width) solid var(--border-color);
     border-radius: var(--border-radius-large);
     box-shadow: var(--shadow-large);
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     z-index: 1001;
     max-height: calc(90vh - var(--height-header) - var(--height-header));
-    overflow: hidden; // Prevent popup itself from scrolling
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 
     // Dynamic width based on screen size
     width: 90%;
@@ -269,13 +279,13 @@
       width: 80%;
     }
     @media (min-width: 992px) {
-      width: 85%;
+      width: 80%;
     }
 
     .popup-header {
       background-color: var(--color-tertiary);
       color: var(--text-color-inverted);
-      padding: 0; // No padding for full width
+      padding: 0;
       font-size: var(--font-size-header);
       border-top-left-radius: var(--border-radius-large);
       border-top-right-radius: var(--border-radius-large);
@@ -284,20 +294,20 @@
       align-items: center;
       position: sticky;
       top: 0;
-      z-index: 1002; // Above popup-content
-      padding-left: var(--padding-small); // Small padding for content alignment
+      z-index: 1002;
+      padding-left: var(--padding-small);
       padding-right: var(--padding-small);
 
       h3 {
         margin: 0;
-        padding: var(--padding-small) 0; // Vertical padding only
+        padding: var(--padding-small) 0;
       }
     }
 
     .popup-content {
       padding: var(--padding-small);
-      overflow-y: auto; // Scroll content only
-      max-height: calc(80vh - var(--font-size-header) - 2 * var(--padding-small)); // Account for header height
+      overflow-y: auto;
+      flex: 1 auto;
 
       .add-subitem {
         padding: var(--padding-small);
