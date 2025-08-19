@@ -1,4 +1,6 @@
 import { Injectable } from '@angular/core';
+import { CreatorHubSyncManager, CryptoManager, IndexedDBAbstraction, ROLES, WebSocketTransport } from '../utils/indexeddb-secure-sync.full';
+import { dekRaw, indexKeyRaw, devicePrivJwk, devicePubJwk, dskPubJwk } from '../utils/contants';
 
 @Injectable({
   providedIn: 'root'
@@ -8,7 +10,12 @@ export class AppService {
   title = 'First Book';
 
   constructor() {
-    const dbId = 'my-db';
+    this.run();
+  }
+
+  async run() {
+    
+    const dbId = 'my-db1';
     const deviceId = 'device-A';
 
     const schema = {
@@ -22,9 +29,11 @@ export class AppService {
       }
     };
 
+    console.log('schema = ', schema);
     const db = new IndexedDBAbstraction({ dbId, deviceId, schema });
     await db.init();
 
+    console.log('db initiated ');
     // Attach per-device crypto (keys should come from secure OS store, not IndexedDB)
     const cryptoMgr = new CryptoManager({
       deviceId, dbId, 
@@ -38,6 +47,7 @@ export class AppService {
     });
     db.attachCrypto(cryptoMgr);
 
+    console.log('crypto manager ');
     // Bootstrap creator on first run
     await db.ensureDevice({ deviceId, role: ROLES.CREATOR });
 
@@ -55,13 +65,14 @@ export class AppService {
 
     // Grant device role with signed grant (creator issues)
     //   const grant = issueRoleGrant({ dskPrivKey, dbId, deviceId:'device-B', role: 'analyst', devicePubJwk });
-    await db.addOrUpdateDevice({ deviceId:'device-B', role:'analyst', grant });
+    // await db.addOrUpdateDevice({ deviceId:'device-B', role:'analyst', grant });
+    await db.addOrUpdateDevice({ deviceId:'device-B', role:'analyst' });
 
     // Use CreatorHubSyncManager so all devices sync via creator
     const socket = new WebSocket('wss://example.com/sync');
     const transport = new WebSocketTransport({ socket });
 
-    const sync = new CreatorHubSyncManager({ db, transport, cryptoManager: cryptoMgr, isCreator: true  (on creator device) });
+    const sync = new CreatorHubSyncManager({ db, transport, cryptoManager: cryptoMgr, isCreator: true });
     await sync.start();
 
     // CRUD (auto-encrypted; search uses blind index):
@@ -70,5 +81,6 @@ export class AppService {
 
     // Per-record ACL:
     await db.setRecordAcl('tasks','t1',{ read:['analyst','viewer'], write:['analyst'] });
+  
   }
 }
