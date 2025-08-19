@@ -1,0 +1,43 @@
+<!-- homepage.component.html -->
+<div class="homepage-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">{{appService.title}}</div>
+      <nav class="nav-links">
+        <a (click)="navigateToAbout()" class="link">About Us</a>
+        <button class="btn btn-action" (click)="toggleLogin()">
+          {{ isLoggedIn ? 'Logout' : 'Login' }}
+        </button>
+      </nav>
+    </header>
+  
+    <!-- Main Content -->
+    <main class="main-content">
+      <section class="hero-section text-center">
+        <h1>Welcome to {{appService.title}}</h1>
+        <p>Your all-in-one platform to manage every aspect of your business efficiently.</p>
+        <button *ngIf="!isLoggedIn" class="btn btn-apply btn-large" (click)="toggleLogin()">Get Started - Login Now</button>
+      </section>
+  
+      <!-- Modules Section (Visible only when logged in) -->
+      <section *ngIf="isLoggedIn" class="modules-section">
+        <h2 class="section-title">Dashboard Modules</h2>
+        <div class="modules-grid">
+          <div *ngFor="let module of modules" class="module-card" (click)="navigateToModule(module.route)">
+            <img [src]="module.iconUrl" [alt]="module.name" class="module-icon">
+            <h3 class="module-name">{{ module.name }}</h3>
+            <p class="module-desc">{{ module.description }}</p>
+            <button class="btn btn-action mobile-hidden">Go to {{ module.name }}</button>
+            <div class="mobile-action" [title]="module.description">
+              <span class="mobile-action-icon">→</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  
+    <!-- Footer -->
+    <footer class="footer">
+      <p>&copy; 2025 {{appService.title}}. All rights reserved.</p>
+    </footer>
+  </div>

@@ -1,0 +1,200 @@
+// homepage.component.scss
+// Import the global styles
+@import '../../../../styles.scss';
+
+// Custom styles for homepage
+.homepage-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  
+  .main-content {
+    flex: 1;
+    padding: var(--padding-base);
+    padding-bottom: calc(var(--height-footer) + var(--padding-base) + var(--margin-base)); // Ensure content clears footer
+    background-color: var(--bg-color-body);
+  }
+  
+  .hero-section {
+    padding: var(--padding-large);
+    background-color: var(--color-quaternary);
+    border-radius: var(--border-radius-large);
+    margin-bottom: var(--margin-large);
+    box-shadow: var(--shadow-medium);
+  
+    h1 {
+      font-size: var(--font-size-header);
+      color: var(--color-primary);
+      margin-bottom: var(--margin-small);
+    }
+  
+    p {
+      font-size: var(--font-size-large);
+      color: var(--text-color-secondary);
+      margin-bottom: var(--margin-base);
+    }
+  }
+  
+  .modules-section {
+    .section-title {
+      font-size: var(--font-size-large);
+      color: var(--color-primary);
+      margin-bottom: var(--margin-base);
+      text-align: center;
+    }
+  
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: var(--margin-base);
+    }
+  
+    .module-card {
+      background-color: var(--color-white);
+      border: var(--border-width) solid var(--border-color);
+      border-radius: var(--border-radius-medium);
+      padding: var(--padding-base);
+      box-shadow: var(--shadow-small);
+      cursor: pointer;
+      transition: var(--transition-medium);
+      text-align: center;
+      position: relative; // For mobile action positioning
+  
+      &:hover {
+        box-shadow: var(--shadow-large);
+        transform: translateY(-5px);
+      }
+  
+      .module-icon {
+        display: block;
+        margin: 0 auto var(--margin-small) auto;
+        width: 80px;
+        height: 80px;
+      }
+  
+      .module-name {
+        font-size: var(--font-size-base);
+        color: var(--color-primary);
+        margin-bottom: var(--margin-small);
+      }
+  
+      .module-desc {
+        font-size: var(--font-size-small);
+        color: var(--text-color-secondary);
+        margin-bottom: var(--margin-base);
+      }
+  
+      .mobile-hidden {
+        display: block;
+      }
+  
+      .mobile-action {
+        display: none; // Hidden on desktop/tablet
+      }
+    }
+  }
+  
+  .logo {
+    font-size: var(--font-size-header);
+    font-weight: bold;
+    color: var(--text-color-inverted);
+  }
+  
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: var(--margin-base);
+  
+    .link {
+      color: var(--text-color-inverted);
+      text-decoration: none;
+      cursor: pointer;
+      font-size: var(--font-size-base);
+  
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+  
+  // Responsive adjustments for mobile
+  @media (max-width: 767px) {
+    .main-content {
+      padding-bottom: calc(var(--height-footer) + var(--padding-base) + var(--margin-large)); // Extra padding for footer
+    }
+  
+    .modules-grid {
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); // 2-3 blocks per row
+      gap: var(--margin-small);
+    }
+  
+    .module-card {
+      padding: var(--padding-small);
+      min-height: 120px; // Ensure enough space for icon and name
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+  
+      .module-icon {
+        width: 60px;
+        height: 60px;
+        margin-bottom: var(--margin-small);
+      }
+  
+      .module-name {
+        font-size: var(--font-size-small);
+        margin: 0;
+      }
+  
+      .module-desc {
+        display: none; // Hide description in mobile
+      }
+  
+      .mobile-hidden {
+        display: none; // Hide standard button
+      }
+  
+      .mobile-action {
+        display: block;
+        position: absolute;
+        bottom: var(--padding-small);
+        right: var(--padding-small);
+        width: 24px;
+        height: 24px;
+        background-color: var(--bg-color-button-action);
+        color: var(--text-color-inverted);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--font-size-small);
+        box-shadow: var(--shadow-small);
+        transition: var(--transition-fast);
+  
+        &:hover,
+        &:active {
+          background-color: var(--color-primary);
+        }
+  
+        // Tooltip for description on tap/hover
+        &[title]:hover:after,
+        &[title]:active:after {
+          content: attr(title);
+          position: absolute;
+          bottom: 30px;
+          right: 0;
+          background-color: var(--color-tertiary);
+          color: var(--text-color-inverted);
+          padding: var(--padding-small);
+          border-radius: var(--border-radius-small);
+          font-size: var(--font-size-small);
+          white-space: nowrap;
+          z-index: 10;
+          max-width: 150px;
+          text-align: left;
+        }
+      }
+    }
+  }
