@@ -200,6 +200,39 @@ async function hmacDigest(key: CryptoKey, bytes: Uint8Array) {
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes));
 }
 
+export async function bootstrapSecrets(dbId: string, deviceId: string): Promise<SecretBundle> {
+  // 1. Generate AES key for data encryption
+  const aesKey = await genAesKey();
+  const dekRaw = await exportRawKey(aesKey);
+
+  // 2. Generate HMAC key for blind indexes
+  const indexKey = await genAesKey(); // reuse AES generator, raw 32 bytes is fine
+  const indexKeyRaw = await exportRawKey(indexKey);
+
+  // 3. Generate device signing keypair (ECDSA P-256)
+  const { publicKey, privateKey } = await genSigningKeyPair();
+  const devicePubJwk = await crypto.subtle.exportKey("jwk", publicKey);
+  const devicePrivJwk = await crypto.subtle.exportKey("jwk", privateKey);
+
+  // 4. In creator device case: also generate DSK (signing keypair for grants)
+  // For non-creator, this comes from creator later.
+  // Example:
+  // const { publicKey: dskPub, privateKey: dskPriv } = await genSigningKeyPair();
+  // const dskPubJwk = await crypto.subtle.exportKey("jwk", dskPub);
+  // const dskPrivJwk = await crypto.subtle.exportKey("jwk", dskPriv);
+
+  // Save securely (NOT in IndexedDB if you care about tamper resistance)
+  // e.g., localStorage + OS-level key store, or passcode-protected secure enclave
+
+  return {
+    dekRaw,
+    indexKeyRaw,
+    devicePrivJwk: devicePrivJwk as JsonWebKey,
+    devicePubJwk: devicePubJwk as JsonWebKey,
+    dskPubJwk: null // unless you’re on the creator and want to inject the creator’s pubkey here
+  };
+}
+
 // n-grams for partial search
 function ngrams(s: string, n = 3) {
   const out = new Set<string>();
@@ -353,11 +386,9 @@ export class IndexedDBAbstraction {
   async init() {
     const name = `idb:${this.dbId}`;
     const version = this.schema.version || 1;
-    console.log({name, version});
     this._db = await new Promise<IDBDatabase>((resolve, reject) => {
       const req = indexedDB.open(name, version);
       req.onupgradeneeded = (ev) => {
-        console.log('onupgradeneeded = ', ev)
         const db = req.result;
         if (!db.objectStoreNames.contains('_meta')) db.createObjectStore('_meta', { keyPath: 'key' });
         if (!db.objectStoreNames.contains('_devices')) db.createObjectStore('_devices', { keyPath: 'deviceId' });
@@ -368,19 +399,21 @@ export class IndexedDBAbstraction {
 
         const stores = this.schema?.stores || {};
         for (const [storeName, def] of Object.entries(stores)) {
+
           if (!db.objectStoreNames.contains(storeName)) {
             const os = db.createObjectStore(storeName, { keyPath: def?.keyPath || 'id', autoIncrement: !!def?.autoIncrement });
             (def?.indexes || []).forEach((idx) => os.createIndex(idx.name, idx.keyPath, idx.options || {}));
+            
           } else if ((ev.oldVersion || 0) < version) {
             const os = (req.transaction as IDBTransaction).objectStore(storeName);
             (def?.indexes || []).forEach((idx) => {
               if (!os.indexNames.contains(idx.name)) os.createIndex(idx.name, idx.keyPath, idx.options || {});
             });
           }
+
         }
       };
       req.onsuccess = () => {
-        console.log('result = ', req.result)
         resolve(req.result);
       }
       req.onerror = () => {
@@ -389,7 +422,6 @@ export class IndexedDBAbstraction {
       }
     });
 
-    console.log('_db = ', this._db)
     // init meta + roles
     const tx = this._tx(['_meta', '_roles'], 'readwrite');
     const metaStore = tx.objectStore('_meta');
@@ -408,11 +440,8 @@ export class IndexedDBAbstraction {
       this._bc.onmessage = (ev) => { if ((ev?.data as any)?.type) this._events.emit((ev.data as any).type, (ev.data as any).payload); };
     } catch (err) { console.log('er = ',err) }
 
-    console.log('channel done')
-
     // Create secure index stores if needed
-    await this._ensureSecureIndexStores();
-    console.log('index stores secured')
+    // await this._ensureSecureIndexStores();
 
     // Load policies into memory
     this._policies = await this._loadPolicies();
@@ -569,12 +598,14 @@ export class IndexedDBAbstraction {
 
     // secure index build
     const def = this.schema?.stores?.[store];
-    let tokens: string[] = [];
+    // let tokens: string[] = [];
+    let withMeta_copy = JSON.parse(JSON.stringify(withMeta));
     if (def?.secureIndex && def.secureIndex.length) {
       for (const field of def.secureIndex) {
         const val = (withMeta?.[field] ?? '') + '';
         const t = await this.crypto.blindTokens(val, 3);
-        tokens = tokens.concat(t);
+        // tokens = tokens.concat(t);
+        withMeta_copy[field] = t;
       }
     }
 
@@ -582,9 +613,8 @@ export class IndexedDBAbstraction {
     const enc = await this.crypto.encryptJson(withMeta);
     const idKey = key ?? withMeta?.id ?? uid('key');
 
-    const tx = this._tx([store, this._secureIndexStoreName(store)], 'readwrite');
-    await toPromise(tx.objectStore(store).put({ id: idKey, _enc: enc }));
-    if (tokens.length) await toPromise(tx.objectStore(this._secureIndexStoreName(store)).put({ id: idKey, token: tokens }));
+    const tx = this._tx([store], 'readwrite');
+    await toPromise(tx.objectStore(store).put({ id: idKey, _enc: enc, ...withMeta_copy }));
     await tx.done;
 
     await this._recordChange({ type: 'upsert', store, key: idKey, value: enc, enc: true });
@@ -649,8 +679,8 @@ export class IndexedDBAbstraction {
       const t = await this.crypto.blindTokens(String(text || ''), 3);
       tokens.push(...t);
     }
-    const tx = this._tx([this._secureIndexStoreName(store), store]);
-    const sidx = tx.objectStore(this._secureIndexStoreName(store)).index('byToken');
+    const tx = this._tx([store]);
+    const sidx = tx.objectStore(store).index('byTitle');
     const candidateIds = new Map<string, number>();
     for (const tok of tokens) {
       const rows = await toPromise(sidx.getAll(tok));
@@ -771,44 +801,6 @@ export class IndexedDBAbstraction {
     if (change.lamport > existingL) return true;
     if (change.lamport < existingL) return false;
     return (change.deviceId || '') > (existing?._updatedBy || '');
-  }
-
-  async _ensureSecureIndexStores() {
-    console.log('_ensureSecureIndexStores')
-    const stores = this.schema?.stores || {};
-    const name = `idb:${this.dbId}`;
-    const missing: string[] = [];
-    for (const [storeName, def] of Object.entries(stores)) {
-      if (def?.secureIndex && def.secureIndex.length) {
-        if (!this._db) throw new Error('DB not ready');
-        if (!this._db.objectStoreNames.contains(this._secureIndexStoreName(storeName))) missing.push(storeName);
-      }
-    }
-
-    if (!missing.length) return;
-    const newVersion = (this.schema.version || 1) + 1;
-    console.log('newVersion = ', newVersion)
-    await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open(name, newVersion);
-      console.log('req = ', req)
-      req.onupgradeneeded = () => {
-        console.log('onupgradeneeded')
-        const db = req.result;
-        for (const storeName of missing) {
-          if (!db.objectStoreNames.contains(this._secureIndexStoreName(storeName))) {
-            const os = db.createObjectStore(this._secureIndexStoreName(storeName), { keyPath: 'id' });
-            os.createIndex('byToken', 'token', { multiEntry: true });
-          }
-        }
-      };
-      req.onsuccess = () => { 
-        console.log('success')
-        req.result.close(); this._db = req.result; resolve();
-       };
-      req.onerror = () => reject(req.error);
-    });
-    console.log('missing = ', missing)
-    this.schema.version = newVersion;
   }
 
   _secureIndexStoreName(store: string) { return `__sidx__${store}`; }
