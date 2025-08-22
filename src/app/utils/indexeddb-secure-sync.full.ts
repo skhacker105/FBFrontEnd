@@ -509,6 +509,14 @@ export class IndexedDBAbstraction {
     return all;
   }
 
+  async listRoles() {
+    const tx = this._tx(['_roles']);
+    const store = tx.objectStore('_roles');
+    const all = await toPromise(store.getAll());
+    await tx.done;
+    return all;
+  }
+
   async getDevice(deviceId: string) {
     const tx = this._tx(['_devices']);
     const v = await toPromise(tx.objectStore('_devices').get(deviceId));
@@ -582,12 +590,14 @@ export class IndexedDBAbstraction {
     return dec ?? null;
   }
 
-  async getAll(store: string) {
+  async getAll(store: string, needDecryption = true) {
     await this._assertPermission('READ');
     if (!this.crypto) throw new Error('CryptoManager not attached');
     const tx = this._tx([store]);
     const rows = await toPromise(tx.objectStore(store).getAll());
     await tx.done;
+    if (!needDecryption) return rows;
+
     const out: any[] = [];
     for (const r of rows) out.push(await this.crypto.decryptJson(r._enc));
     return out;

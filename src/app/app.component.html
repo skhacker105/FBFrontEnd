@@ -1,3 +1,53 @@
-<button (click)="appService.addTask1()">Add Task 1</button>
-<button (click)="appService.searchTask1()">Search Task 1</button>
+@if (appService.dbId && appService.deviceId) {
+
+    <button (click)="loadAllDevices()">Get All Devices</button>
+
+    <br><b>Devices</b><br>
+    <select [(ngModel)]="device" (change)="generateDBConnectionKey(device)">
+        <option></option>
+        @for(device of devices; track device.deviceId) {
+            <option [attr.value]="device.deviceId">
+                {{ device.deviceId }} - {{ device.role }}
+            </option>
+        }
+        
+    </select>
+    
+
+    <br><br>
+    <b>Device Id</b>
+    <input [(ngModel)]="newDeviceId">
+    <br>
+    <b>Roles - {{ role }}</b><br>
+    <select [(ngModel)]="role">
+        <option></option>
+        @for(role of roles; track role.role) {
+            <option [attr.value]="role.role">
+                {{ role.role | uppercase}}
+            </option>
+        }
+        
+    </select>
+    <button (click)="addDevice(newDeviceId, role); newDeviceId = ''; role = '';">Add Device</button>
+    
+    {{ dbConnectionKey }}
+
+} @else {
+    @if (!appService.deviceId) {
+        Set Device Name <br>
+        <input [(ngModel)]="deviceId">
+        <button (click)="appService.setDeviceId(deviceId); deviceId='';">Create New Device</button>
+
+    } @else if (!appService.dbId) {
+        <b>New DB</b><br>
+        <input [(ngModel)]="dbId">
+        <button (click)="appService.createDatabaseAsCreator(appService.deviceId, dbId, schema); dbId = '';">Create Your DB</button>
+
+        <br><br>
+
+        <b>Import DB</b><br>
+        <input [(ngModel)]="importDB">
+        <button (click)="loadConnectionString(importDB)">Join Other's DB</button>
+    }
+}
 <router-outlet />
