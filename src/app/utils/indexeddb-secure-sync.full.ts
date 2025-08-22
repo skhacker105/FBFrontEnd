@@ -200,7 +200,7 @@ async function hmacDigest(key: CryptoKey, bytes: Uint8Array) {
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes));
 }
 
-export async function bootstrapSecrets(dbId: string, deviceId: string): Promise<SecretBundle> {
+export async function bootstrapSecrets(dbId: string, deviceId: string, isCreator = false): Promise<SecretBundle> {
   // 1. Generate AES key for data encryption
   const aesKey = await genAesKey();
   const dekRaw = await exportRawKey(aesKey);
@@ -214,22 +214,23 @@ export async function bootstrapSecrets(dbId: string, deviceId: string): Promise<
   const devicePubJwk = await crypto.subtle.exportKey("jwk", publicKey);
   const devicePrivJwk = await crypto.subtle.exportKey("jwk", privateKey);
 
-  // 4. In creator device case: also generate DSK (signing keypair for grants)
-  // For non-creator, this comes from creator later.
-  // Example:
-  // const { publicKey: dskPub, privateKey: dskPriv } = await genSigningKeyPair();
-  // const dskPubJwk = await crypto.subtle.exportKey("jwk", dskPub);
-  // const dskPrivJwk = await crypto.subtle.exportKey("jwk", dskPriv);
+  // 4. Optionally, generate DSK (creator-only signing keypair)
+  let dskPubJwk: JsonWebKey | null = null;
+  let dskPrivJwk: JsonWebKey | null = null;
+  if (isCreator) {
+    const { publicKey: dskPub, privateKey: dskPriv } = await genSigningKeyPair();
+    dskPubJwk = await crypto.subtle.exportKey("jwk", dskPub);
+    dskPrivJwk = await crypto.subtle.exportKey("jwk", dskPriv);
+  }
 
-  // Save securely (NOT in IndexedDB if you care about tamper resistance)
-  // e.g., localStorage + OS-level key store, or passcode-protected secure enclave
-
+  // Return full secret bundle
   return {
     dekRaw,
     indexKeyRaw,
     devicePrivJwk: devicePrivJwk as JsonWebKey,
     devicePubJwk: devicePubJwk as JsonWebKey,
-    dskPubJwk: null // unless you’re on the creator and want to inject the creator’s pubkey here
+    dskPubJwk,   // creator case: real key, otherwise null
+    dskPrivJwk   // you may or may not want to persist this depending on storage strategy
   };
 }
 
@@ -275,6 +276,7 @@ export type SecretBundle = {
   devicePrivJwk: JsonWebKey;
   devicePubJwk: JsonWebKey;
   dskPubJwk?: JsonWebKey | null;
+  dskPrivJwk: JsonWebKey | null; //CryptoKey;
 };
 
 // ------------------------------
@@ -403,7 +405,7 @@ export class IndexedDBAbstraction {
           if (!db.objectStoreNames.contains(storeName)) {
             const os = db.createObjectStore(storeName, { keyPath: def?.keyPath || 'id', autoIncrement: !!def?.autoIncrement });
             (def?.indexes || []).forEach((idx) => os.createIndex(idx.name, idx.keyPath, idx.options || {}));
-            
+
           } else if ((ev.oldVersion || 0) < version) {
             const os = (req.transaction as IDBTransaction).objectStore(storeName);
             (def?.indexes || []).forEach((idx) => {
@@ -432,13 +434,13 @@ export class IndexedDBAbstraction {
       const existing = await toPromise(rolesStore.get(role));
       if (!existing) await toPromise(rolesStore.put({ role, permissions: this.rolePermissions[role] }));
     }
-    try { await (tx as TxWithDone).done; } catch (err) { console.log('er = ',err) }
+    try { await (tx as TxWithDone).done; } catch (err) { console.log('er = ', err) }
 
     // BroadcastChannel
     try {
       this._bc = new BroadcastChannel(`idb-sync:${this.dbId}`);
       this._bc.onmessage = (ev) => { if ((ev?.data as any)?.type) this._events.emit((ev.data as any).type, (ev.data as any).payload); };
-    } catch (err) { console.log('er = ',err) }
+    } catch (err) { console.log('er = ', err) }
 
     // Create secure index stores if needed
     // await this._ensureSecureIndexStores();
@@ -1147,8 +1149,11 @@ export const AdminAPI = {
 // ------------------------------
 // RoleGrant issuance helper (run on Creator only)
 // ------------------------------
-export async function issueRoleGrant({ dskPrivKey, dbId, deviceId, role, devicePubJwk, expiresAt = null }: { dskPrivKey: CryptoKey; dbId: string; deviceId: string; role: string; devicePubJwk: JsonWebKey; expiresAt?: number | null }) {
+export async function issueRoleGrant(
+  { dskPrivKey, dbId, deviceId, role, devicePubJwk, expiresAt = null }: 
+  { dskPrivKey: CryptoKey; dbId: string; deviceId: string; role: string; devicePubJwk: JsonWebKey; expiresAt?: number | null }
+  ): Promise<RoleGrant> {
   const payload = { type: 'RoleGrant', dbId, deviceId, role, devicePubJwk, createdAt: Date.now(), expiresAt };
   const sig = b64(await signBytes(dskPrivKey, utf8(JSON.stringify(payload))));
-  return { ...payload, sig };
+  return { ...payload, sig } as RoleGrant;
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { CreatorHubSyncManager, CryptoManager, IndexedDBAbstraction, ROLES, SecretBundle, WebSocketTransport, bootstrapSecrets } from '../utils/indexeddb-secure-sync.full';
+import { CreatorHubSyncManager, CryptoManager, IndexedDBAbstraction, ROLES, RoleGrant, SecretBundle, WebSocketTransport, bootstrapSecrets, issueRoleGrant } from '../utils/indexeddb-secure-sync.full';
 import { dekRaw, indexKeyRaw, devicePrivJwk, devicePubJwk, dskPubJwk } from '../utils/contants';
 
 @Injectable({
@@ -25,7 +25,7 @@ export class AppService {
         tasks: {
           keyPath: 'id',
           indexes: [{ name: 'byTitle', keyPath: 'title', options: { multiEntry: true } }],
-          secureIndex: ['title', 'description'] // enables encrypted partial search
+          secureIndex: ['title', 'description', 'status'] // enables encrypted partial search
         }
       }
     };
@@ -35,7 +35,7 @@ export class AppService {
     await db.init();
 
     // Attach per-device crypto (keys should come from secure OS store, not IndexedDB)
-    let cryptoSecret = this.loadSecretsFromLocalStorage(dbId, deviceId) ?? await bootstrapSecrets(dbId, deviceId);
+    let cryptoSecret = this.loadSecretsFromLocalStorage(dbId, deviceId) ?? await bootstrapSecrets(dbId, deviceId, true);
     this.saveSecretsToLocalStorage(dbId, deviceId, cryptoSecret);
     const cryptoMgr = new CryptoManager({
       deviceId, dbId,
@@ -61,31 +61,25 @@ export class AppService {
     await db.addCustomRole('analyst', { READ: true, WRITE: false, DELETE: false, MANAGE_ROLES: false, MANAGE_DEVICES: false, MANAGE_SCHEMA: false });
 
     // // Grant device role with signed grant (creator issues)
-    //   const grant = issueRoleGrant({ dskPrivKey, dbId, deviceId:'device-B', role: 'analyst', devicePubJwk });
-    // await db.addOrUpdateDevice({ deviceId:'device-B', role:'analyst', grant });
-    await db.addOrUpdateDevice({ deviceId: 'device-B', role: 'analyst' });
+    const grantVal = await issueRoleGrant({ dskPrivKey: cryptoMgr.devicePriv, dbId, deviceId, role: 'analyst', devicePubJwk });
+    const grant: RoleGrant = grantVal;
+    if (grant)
+      await db.addOrUpdateDevice({ deviceId: 'device-A', role: 'creator', grant });
+    // await db.addOrUpdateDevice({ deviceId: 'device-B', role: 'analyst' });
 
     // // Use CreatorHubSyncManager so all devices sync via creator
-    // const socket = new WebSocket('wss://example.com/sync');
-    // const transport = new WebSocketTransport({ socket });
+    const socket = new WebSocket('https://echo.websocket.org/');
+    const transport = new WebSocketTransport({ socket });
 
-    // const sync = new CreatorHubSyncManager({ db, transport, cryptoManager: cryptoMgr, isCreator: true });
-    // await sync.start();
-
-
-    // // CRUD (auto-encrypted; search uses blind index):
-    // await db.put('tasks', { id:'t1', title:'hello world', description:'secret note', status:'open' });
-    // const found = await db.search('tasks', { text: 'hello world', fields: ['title'], minMatch: 'ALL' });
-
-    // // // Per-record ACL:
-    // await db.setRecordAcl('tasks','t1',{ read:['analyst','viewer'], write:['analyst'] });
-
+    const sync = new CreatorHubSyncManager({ db, transport, cryptoManager: cryptoMgr, isCreator: true });
+    await sync.start();
   }
 
   // Save bundle into localStorage
   saveSecretsToLocalStorage(dbId: string, deviceId: string, bundle: SecretBundle) {
     const key = `secrets_${dbId}_${deviceId}`;
     const obj = {
+      dskPrivJwk: bundle.dskPrivJwk,
       dekRaw: toB64(bundle.dekRaw),
       indexKeyRaw: toB64(bundle.indexKeyRaw),
       devicePrivJwk: bundle.devicePrivJwk,
@@ -104,6 +98,7 @@ export class AppService {
     try {
       const parsed = JSON.parse(raw);
       return {
+        dskPrivJwk: parsed.dskPrivJwk,
         dekRaw: fromB64(parsed.dekRaw),
         indexKeyRaw: fromB64(parsed.indexKeyRaw),
         devicePrivJwk: parsed.devicePrivJwk,
@@ -121,7 +116,7 @@ export class AppService {
   }
 
   async searchTask1() {
-    const found = await this.db?.search('tasks', { text: 'hello world', fields: ['title'], minMatch: 'ALL' });
+    const found = await this.db?.search('tasks', { text: 'hello', fields: ['title'], minMatch: 'ALL' });
     console.log('found = ', found)
   }
 }
