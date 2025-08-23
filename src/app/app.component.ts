@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { AppService, toB64 } from './services/app.service';
+import { AppService, fromB64, toB64 } from './services/app.service';
 import { SecretBundle } from './utils/indexeddb-secure-sync.full';
 
 @Component({
@@ -59,6 +59,17 @@ export class AppComponent {
     this.roles = roles.filter(r => r.role != 'creator');
   }
 
+  reviveSecretBundle(raw: any): SecretBundle {
+    return {
+      ...raw,
+      dekRaw: fromB64(raw.dekRaw),
+      indexKeyRaw: fromB64(raw.indexKeyRaw),
+      devicePubJwk: raw.devicePubJwk,          // stays object
+      devicePrivJwk: raw.devicePrivJwk,        // stays object
+      // if you stored others, revive them too
+    };
+  }
+
   loadConnectionString(importDB: string) {
     if (!this.appService.deviceId) return;
 
@@ -70,7 +81,7 @@ export class AppComponent {
         return;
       }
       this.appService.joinAsDevice(this.appService.deviceId, parsed.role,
-        parsed.dbId, parsed.secret, parsed.schema);
+        parsed.dbId, this.reviveSecretBundle(parsed.secret), parsed.schema);
 
     } catch (err) { console.log(`${importDB} failed to load with error ${err}`) }
   }
@@ -99,7 +110,6 @@ export class AppComponent {
   }
 
   addDevice(deviceId: string, role: string) {
-    console.log({ deviceId, role })
     if (!deviceId || !role || !this.appService.dbId || !this.appService.cryptoMgr?.devicePubJwk) return;
 
     this.appService.addDevice(deviceId, role, this.appService.cryptoMgr.devicePubJwk)

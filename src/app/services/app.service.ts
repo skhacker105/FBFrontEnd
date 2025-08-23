@@ -190,7 +190,7 @@ export class AppService {
    * Utility: start sync manager
    */
   private async startSync(isCreator: boolean) {
-    const socket = new WebSocket('wss://echo.websocket.org/'); // replace with real hub server
+    const socket = new WebSocket('ws://localhost:3000'); // replace with real hub server
     const transport = new WebSocketTransport({ socket });
 
     this.sync = new CreatorHubSyncManager({
@@ -233,7 +233,7 @@ export class AppService {
 
   async searchTask(text: string) {
     const found = await this.db?.search('tasks', { text, fields: ['title'], minMatch: 'ALL' });
-    console.log('found = ', found);
+    // console.log('found = ', found);
     return found;
   }
 
