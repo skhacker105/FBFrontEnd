@@ -1,6 +1,6 @@
 @if (appService.dbId && appService.deviceId) {
 
-    <button (click)="loadAllDevices()">Get All Devices</button>
+    <button (click)="loadAllDevices(); loadAllRoles();">Get All Devices & Roles</button>
 
     <br><b>Devices</b><br>
     <select [(ngModel)]="device" (change)="generateDBConnectionKey(device)">
