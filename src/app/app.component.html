@@ -1,6 +1,7 @@
 @if (appService.dbId && appService.deviceId) {
 
     <button (click)="loadAllDevices(); loadAllRoles();">Get All Devices & Roles</button>
+    <button (click)="appService.addTask('1', 'my task 1', 'some task', 'pending');">Add Task</button>
 
     <br><b>Devices</b><br>
     <select [(ngModel)]="device" (change)="generateDBConnectionKey(device)">
