@@ -9,7 +9,7 @@ import {
   WebSocketTransport,
   bootstrapSecrets,
   issueRoleGrant
-} from '../utils/indexeddb-secure-sync.full';
+} from '../indexeddb-handler';
 
 @Injectable({
   providedIn: 'root'
