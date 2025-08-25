@@ -23,7 +23,7 @@ export class HttpTransport extends BaseTransport {
                 const res = await fetch(url, { headers: this.headers });
                 if (res.ok) {
                     const arr = await res.json();
-                    (arr || []).forEach((m: any) => this['emit']('message', m));
+                    (arr || []).forEach((m: any) => this['_emit']('message', m));
                 }
             } catch { }
             this._timer = setTimeout(poll, this.pollIntervalMs);

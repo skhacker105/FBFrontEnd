@@ -22,21 +22,73 @@ export class AppService {
   sync: CreatorHubSyncManager | undefined;
   dbId: string | null;
   deviceId: string | null = null;
+  creatorDeviceId: string | null = null;
 
   constructor() {
     this.deviceId = this.getDeviceId();
     this.dbId = this.getDBId();
+    this.creatorDeviceId = this.getCreatorDeviceId();
   }
 
-  /**
-   * Try to restore DB, crypto, and sync state from localStorage.
-   */
+  // ---------- LocalStorage helpers ----------
+  setDeviceId(deviceId: string) {
+    this.deviceId = deviceId;
+    localStorage.setItem('myDeviceId', deviceId);
+  }
+
+  getDeviceId(): string | null {
+    return localStorage.getItem('myDeviceId');
+  }
+
+  setDBId(dbId: string) {
+    this.dbId = dbId;
+    localStorage.setItem('myDBId', dbId);
+  }
+
+  getDBId(): string | null {
+    return localStorage.getItem('myDBId');
+  }
+
+  setCreatorDeviceId(creatorDeviceId: string) {
+    this.creatorDeviceId = creatorDeviceId;
+    localStorage.setItem('creatorDeviceId', creatorDeviceId);
+  }
+
+  getCreatorDeviceId(): string | null {
+    return localStorage.getItem('creatorDeviceId');
+  }
+
+  private saveSecretsToLocalStorage(dbId: string, deviceId: string, bundle: SecretBundle) {
+    const key = `secrets_${dbId}_${deviceId}`;
+    localStorage.setItem(key, JSON.stringify({
+      ...bundle,
+      dekRaw: toB64(bundle.dekRaw),
+      indexKeyRaw: toB64(bundle.indexKeyRaw)
+    }));
+  }
+
+  loadSecretsFromLocalStorage(dbId: string, deviceId: string): SecretBundle | null {
+    const key = `secrets_${dbId}_${deviceId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        ...parsed,
+        dekRaw: fromB64(parsed.dekRaw),
+        indexKeyRaw: fromB64(parsed.indexKeyRaw)
+      };
+    } catch (e) {
+      console.warn('Failed to parse secrets:', e);
+      return null;
+    }
+  }
+
+  // ---------- Restore after refresh ----------
   async restoreFromLocalStorage(deviceId: string, dbId: string, schema: any): Promise<boolean> {
     const secrets = this.loadSecretsFromLocalStorage(dbId, deviceId);
     if (!secrets) return false;
 
-    // minimal schema — actual schema/policies sync later
-    // const schema = { version: 1, stores: {} };
     this.db = new IndexedDBAbstraction({ dbId, deviceId, schema });
     await this.db.init();
 
@@ -47,47 +99,28 @@ export class AppService {
     });
     this.db.attachCrypto(this.cryptoMgr);
 
-    // try to rejoin with whatever role is in DB (will be synced/validated)
     await this.db.ensureDevice({ deviceId, role: ROLES.VIEWER });
 
-    // restart sync
-    await this.startSync(false);
-
+    const device = await this.db.getDevice(deviceId);
+    const isAdmin = device.role === ROLES.CREATOR;
+    await this.startSync(isAdmin);
     return true;
   }
 
-  /**
-   * Attach the current deviceId (stored or given externally).
-   */
-  setDeviceId(deviceId: string) {
-    this.deviceId = deviceId;
-    localStorage.setItem('myDeviceId', deviceId);
+  resetDevice(removeDB = true) {
+    localStorage.removeItem(`secrets_${this.dbId}_${this.deviceId}`);
+    localStorage.removeItem('myDBId');
+    localStorage.removeItem('creatorDeviceId');
+    if (removeDB) {
+      indexedDB.deleteDatabase('idb:' + (this.dbId ?? ''));
+    }
   }
 
-  getDeviceId(): string | null {
-    return localStorage.getItem('myDeviceId');
-  }
-
-  /**
-   * Attach the current dbId (stored or given externally).
-   */
-  setDBId(dbId: string) {
-    this.dbId = dbId;
-    localStorage.setItem('myDBId', dbId);
-  }
-
-  getDBId(): string | null {
-    return localStorage.getItem('myDBId');
-  }
-
-  /**
-   * Step 1: Device A creates the database (as CREATOR).
-   */
+  // ---------- Main flows ----------
   async createDatabaseAsCreator(deviceId: string, dbId: string, schema: any) {
     this.setDeviceId(deviceId);
     this.setDBId(dbId);
-
-
+    this.setCreatorDeviceId(deviceId);
 
     this.db = new IndexedDBAbstraction({ dbId, deviceId, schema });
     await this.db.init();
@@ -124,34 +157,26 @@ export class AppService {
       MANAGE_SCHEMA: false
     });
 
-    // grant creator role to the creator device
     if (this.cryptoMgr.devicePubJwk) {
       const grant: RoleGrant = await issueRoleGrant({
-        dskPrivKey: this.cryptoMgr.devicePriv,
+        cryptoManager: this.cryptoMgr,
         dbId: this.dbId ?? 'no-db',
         deviceId,
-        role: 'creator',
+        role: ROLES.CREATOR,
         devicePubJwk: this.cryptoMgr.devicePubJwk
       });
-      await this.db?.addOrUpdateDevice({ deviceId, role: 'creator', grant });
+      await this.db?.addOrUpdateDevice({ deviceId, role: ROLES.CREATOR, grant });
     }
 
-
-
     await this.startSync(true);
-
     console.log(`DB ${this.dbId} created by ${deviceId} as CREATOR`);
   }
 
-  /**
-   * Step 2: Creator/Admin adds a new device with given role.
-   */
   async addDevice(deviceId: string, role: string, devicePubJwk: JsonWebKey) {
-    if (!this.cryptoMgr) throw new Error("CryptoMgr not initialized");
-    const dskPrivKey = this.cryptoMgr.devicePriv;
+    if (!this.cryptoMgr) throw new Error('CryptoMgr not initialized');
 
     const grant: RoleGrant = await issueRoleGrant({
-      dskPrivKey,
+      cryptoManager: this.cryptoMgr,
       dbId: this.dbId ?? 'no-db',
       deviceId,
       role,
@@ -162,12 +187,10 @@ export class AppService {
     console.log(`Device ${deviceId} added as ${role}`);
   }
 
-  /**
-   * Step 3: Any device joins (B or C).
-   */
-  async joinAsDevice(deviceId: string, role: string, dbId: string, cryptoSecret: SecretBundle, schema: any) {
+  async joinAsDevice(deviceId: string, role: string, dbId: string, cryptoSecret: SecretBundle, schema: any, creatorDeviceId: string) {
     this.setDeviceId(deviceId);
     this.setDBId(dbId);
+    this.setCreatorDeviceId(creatorDeviceId);
 
     this.db = new IndexedDBAbstraction({ dbId, deviceId, schema });
     await this.db.init();
@@ -181,80 +204,53 @@ export class AppService {
 
     await this.db.ensureDevice({ deviceId, role });
 
-    await this.startSync(false);
-
+    await this.startSync(false, creatorDeviceId);
     console.log(`Device ${deviceId} joined as ${role}`);
   }
 
-  /**
-   * Utility: start sync manager
-   */
-  private async startSync(isCreator: boolean) {
-    const socket = new WebSocket('ws://localhost:3000'); // replace with real hub server
-    const transport = new WebSocketTransport({ socket });
+  // ---------- Sync ----------
+  private async startSync(isCreator: boolean, creatorDeviceId: string | null = null) {
+    const transport = new WebSocketTransport(`ws://localhost:3000?deviceId=${this.deviceId}`);
 
     this.sync = new CreatorHubSyncManager({
       db: this.db!,
       transport,
       cryptoManager: this.cryptoMgr!,
-      isCreator
+      isCreator,
+      creatorDeviceId
     });
     await this.sync.start();
-  }
 
-  private saveSecretsToLocalStorage(dbId: string, deviceId: string, bundle: SecretBundle) {
-    const key = `secrets_${dbId}_${deviceId}`;
-    localStorage.setItem(key, JSON.stringify({
-      ...bundle,
-      dekRaw: toB64(bundle.dekRaw),
-      indexKeyRaw: toB64(bundle.indexKeyRaw)
-    }));
-  }
-
-  loadSecretsFromLocalStorage(dbId: string, deviceId: string): SecretBundle | null {
-    const key = `secrets_${dbId}_${deviceId}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw)
-      return {
-        ...parsed, dekRaw: fromB64(parsed.dekRaw),
-        indexKeyRaw: fromB64(parsed.indexKeyRaw)
-      };
-    } catch (e) {
-      console.warn("Failed to parse secrets:", e);
-      return null;
+    if (!isCreator) {
+      this.sync.requestInitialSync(); // ✅ correct method name
     }
   }
 
+  // ---------- DB helpers ----------
   async addTask(id: string, title: string, description: string, status: string) {
     await this.db?.put('tasks', { id, title, description, status });
   }
 
   async searchTask(text: string) {
-    const found = await this.db?.search('tasks', { text, fields: ['title'], minMatch: 'ALL' });
-    // console.log('found = ', found);
-    return found;
+    return await this.db?.search('tasks', { text, fields: ['title'], minMatch: 'ALL' });
   }
 
   async listDevices() {
-    if (!this.db) throw new Error("DB not initialized");
-    const devices = await this.db.listDevices();
-    return devices;
+    if (!this.db) throw new Error('DB not initialized');
+    return await this.db.listDevices();
   }
 
   async listRoles() {
-    if (!this.db) throw new Error("DB not initialized");
-    const devices = await this.db.listRoles();
-    return devices;
+    if (!this.db) throw new Error('DB not initialized');
+    return await this.db.listRoles();
   }
 }
 
-
-// Utility: serialize Uint8Array into base64
+// ---------- Utility ----------
 export function toB64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
+
 export function fromB64(s: string): Uint8Array {
   return new Uint8Array([...atob(s)].map(c => c.charCodeAt(0)));
 }

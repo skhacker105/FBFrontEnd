@@ -5,5 +5,5 @@ export class BluetoothTransport extends BaseTransport {
     constructor({ sendFn } = {} as { sendFn?: (msg: any) => Promise<void> }) { super(); this._sendFn = sendFn; }
     setSender(fn: (msg: any) => Promise<void>) { this._sendFn = fn; }
     override async send(msg: any) { if (!this._sendFn) throw new Error('No Bluetooth sender provided'); await this._sendFn(msg); }
-    receive(msg: any) { this['emit']('message', msg); }
+    receive(msg: any) { this['_emit']('message', msg); }
 }

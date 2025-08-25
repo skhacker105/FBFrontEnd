@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { AppService, fromB64, toB64 } from './services/app.service';
-import { SecretBundle } from './utils/indexeddb-secure-sync.full';
+import { SecretBundle } from './indexeddb-handler';
 
 @Component({
   selector: 'app-root',
@@ -81,13 +81,15 @@ export class AppComponent {
         return;
       }
       this.appService.joinAsDevice(this.appService.deviceId, parsed.role,
-        parsed.dbId, this.reviveSecretBundle(parsed.secret), parsed.schema);
+        parsed.dbId, this.reviveSecretBundle(parsed.secret), parsed.schema, parsed.creatorDeviceId);
 
     } catch (err) { console.log(`${importDB} failed to load with error ${err}`) }
   }
 
   generateDBConnectionKey(deviceId: string) {
     this.dbConnectionKey = '';
+    console.log('this.appService.deviceId = ', this.appService.deviceId)
+    console.log('this.appService.dbId = ', this.appService.dbId)
     if (!this.appService.deviceId || !this.appService.dbId) return;
 
     const device = this.devices.find(d => d.deviceId === deviceId);
@@ -105,7 +107,8 @@ export class AppComponent {
       dbId: this.appService.dbId,
       role: device.role,
       schema: this.schema,
-      secret
+      secret,
+      creatorDeviceId: this.appService.deviceId
     })
   }
 

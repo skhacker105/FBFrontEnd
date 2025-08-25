@@ -23,16 +23,17 @@ export type Schema = {
     stores: Record<string, SchemaStoreDef>;
 };
 
-export type RoleGrant = {
-    type: 'RoleGrant';
+export interface RoleGrant {
+    type: string;
+    createdAt: number;
     dbId: string;
     deviceId: string;
     role: string;
     devicePubJwk: JsonWebKey;
-    createdAt: number;
-    expiresAt?: number | null;
-    sig: string; // creator signature over the payload
-};
+    issuedAt: number;
+    sig: string;
+}   
+
 
 export type SecretBundle = {
     dekRaw: Uint8Array;      // 32 bytes

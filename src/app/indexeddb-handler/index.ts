@@ -7,6 +7,8 @@ export * from './utils/text';
 export * from './crypto/CryptoManager';
 export * from './db/IndexedDBAbstraction';
 
+export * from './sync/CreatorHubSyncManager';
+export * from './sync/SyncManager';
 export * from './sync/SyncManager';
 
 export * from './transports/BaseTransport';
