@@ -117,4 +117,9 @@ export class AppComponent {
 
     this.appService.addDevice(deviceId, role, this.appService.cryptoMgr.devicePubJwk)
   }
+
+  async searchTask(text: string) {
+    const result = await this.appService.searchTask(text);
+    console.log(`Searching text ${text} result = `, result);
+  }
 }

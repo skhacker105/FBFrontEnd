@@ -5,6 +5,7 @@
 
     <br>
     <button (click)="appService.addTask('1', 'my task 1', 'some task', 'pending');">Add Task</button>
+    <button (click)="searchTask('my task 1');">Search Task</button>
 
     <br><b>Devices</b><br>
     <select [(ngModel)]="device" (change)="generateDBConnectionKey(device)">

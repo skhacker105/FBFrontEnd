@@ -49,7 +49,7 @@ export class CreatorHubSyncManager extends SyncManager {
             if (!this.syncing) {
                 const change = ev.detail || ev; // CustomEvent or raw
                 const devices = this.mode === 'device'
-                    ? [this.creatorDeviceId]
+                    ? [{deviceId: this.creatorDeviceId}]
                     : (await this.db.listDevices()).filter(d => d.deviceId)
                 console.log('[CreatorHubSyncManager] Local change → sending', change);
 
@@ -119,33 +119,27 @@ export class CreatorHubSyncManager extends SyncManager {
             // FULL SNAPSHOT
             const snapshot = await this.db.exportCipherSnapshot();
 
-            this.transport.send({
-                type: 'sync-response',
-                dbId: this.db.dbId,
-                toDeviceId: msg.fromDeviceId,
-                fromDeviceId: this.db.deviceId,
-                mode: 'full',
-                schema: this.db.schema,
-                snapshot
-            });
-            console.log('[CreatorHubSyncManager] Sent sync-response (full) with schema/roles/devices');
-
             // stream all rows
             console.log('snapshot = ', snapshot)
+            const upsertLookup: any = {
+                '_devices': 'device_upsert',
+                '_roles': 'role_upsert',
+                '_policies': 'policy_upsert'
+            }
             for (const [store, rows] of Object.entries(snapshot)) {
-                if (['_meta', '_changelog', '_peerSync'].includes(store)) continue;
+                if (['_changelog', '_peerSync'].includes(store)) continue;
                 for (const r of rows) {
                     let change: any;
                     if (r && typeof r === 'object' && 'id' in r && '_enc' in r) {
-                        change = { type: 'upsert', store, key: r.id, value: r._enc, enc: true, lamport: 0, deviceId: 'creator' };
+                        change = { type: 'upsert', store, key: r.id, value: r._enc, enc: true, lamport: 0, deviceId: this.db.deviceId };
                     } else if (store.startsWith('_')) {
                         change = {
-                            type: store === '_devices' ? 'device_upsert' : store === '_roles' ? 'role_upsert' : 'policy_upsert',
+                            type: upsertLookup[store] ?? '',
                             store,
-                            key: (r as any)?.id || (r as any)?.role || (r as any)?.store,
+                            key: (r as any)?.id || (r as any)?.deviceId || (r as any)?.role || (r as any)?.store,
                             value: r,
                             lamport: 0,
-                            deviceId: 'creator'
+                            deviceId: this.db.deviceId
                         };
                     }
                     console.log('[CreatorHubSyncManager] Sending row', change);

@@ -103,7 +103,7 @@ export class AppService {
 
     const device = await this.db.getDevice(deviceId);
     const isAdmin = device.role === ROLES.CREATOR;
-    await this.startSync(isAdmin);
+    await this.startSync(isAdmin, this.creatorDeviceId);
     return true;
   }
 
@@ -191,6 +191,7 @@ export class AppService {
     this.setDeviceId(deviceId);
     this.setDBId(dbId);
     this.setCreatorDeviceId(creatorDeviceId);
+    this.saveSecretsToLocalStorage(dbId, deviceId, cryptoSecret);
 
     this.db = new IndexedDBAbstraction({ dbId, deviceId, schema });
     await this.db.init();
