@@ -58,16 +58,7 @@ export class CreatorHubSyncManager extends SyncManager {
                 console.log('[CreatorHubSyncManager] Local change → sending', change);
 
                 console.log('sending update to devices', devices);
-                for (let device of devices) {
-                    this.transport.send({
-                        type: 'sync-data-update',
-                        dbId: this.db.dbId,
-                        toDeviceId: device.deviceId,
-                        fromDeviceId: this.db.deviceId,
-                        change
-                    });
-                }
-
+                this._sendDataUpdate(change);
             }
         });
 
@@ -147,7 +138,7 @@ export class CreatorHubSyncManager extends SyncManager {
                         };
                     }
                     console.log('[CreatorHubSyncManager] Sending row', change);
-                    this.transport.send({ type: 'sync-data-update', dbId: this.db.dbId, toDeviceId: msg.fromDeviceId, fromDeviceId: this.db.deviceId, change });
+                    this._sendDataUpdate(change, msg.fromDeviceId);
                 }
             }
 
@@ -160,7 +151,7 @@ export class CreatorHubSyncManager extends SyncManager {
             console.log('[CreatorHubSyncManager] Sending sync-response (delta)', changes.length, 'changes');
 
             for (const change of changes) {
-                this.transport.send({ type: 'sync-data-update', dbId: this.db.dbId, toDeviceId: msg.fromDeviceId, fromDeviceId: this.db.deviceId, change });
+                this._sendDataUpdate(change, msg.fromDeviceId);
             }
             this.transport.send({ type: 'sync-end', dbId: this.db.dbId, toDeviceId: msg.fromDeviceId, fromDeviceId: this.db.deviceId });
             this.syncing = false;
@@ -186,6 +177,7 @@ export class CreatorHubSyncManager extends SyncManager {
         const change = msg.change;
         console.log('[CreatorHubSyncManager] Applying remote change', change);
         await this.db.applyRemoteChange(change);
+
         const lamport = Number(change?.lamport || 0);
         if (lamport > this.lastAppliedLamport) {
             this.lastAppliedLamport = lamport;
@@ -194,17 +186,29 @@ export class CreatorHubSyncManager extends SyncManager {
         }
 
         if (this.mode === 'creator') {
+            this._sendDataUpdate(change);
+        }
+    }
+
+    private async _sendDataUpdate(change: any, toDeviceId?: string) {
+        if (this.mode === 'creator' && !toDeviceId) {
             const devices = await this.sendToDeviceList();
-            console.log('sending update to devices', devices);
-            for (let device of devices) {
-                this.transport.send({
-                    type: 'sync-data-update',
-                    dbId: this.db.dbId,
-                    toDeviceId: device.deviceId,
-                    fromDeviceId: this.db.deviceId,
-                    change
-                });
-            }
+            this.transport.send({
+                type: 'sync-data-update',
+                dbId: this.db.dbId,
+                toDeviceId: 'broadcast',
+                fromDeviceId: this.db.deviceId,
+                change,
+                devices: devices.map(d => d.deviceId)
+            });
+        } else {
+            this.transport.send({
+                type: 'sync-data-update',
+                dbId: this.db.dbId,
+                toDeviceId: toDeviceId ?? this.creatorDeviceId,
+                fromDeviceId: this.db.deviceId,
+                change
+            });
         }
     }
 }
