@@ -32,21 +32,6 @@ export class AppComponent {
   };
 
   constructor(public appService: AppService) {
-    setTimeout(() => {
-      // try to restore DB + crypto + sync from local storage
-      if (this.appService.deviceId && this.appService.dbId) {
-        this.appService.restoreFromLocalStorage(this.appService.deviceId, this.appService.dbId, this.schema)
-          .then(ok => {
-            if (ok) {
-              console.log(`Restored session for device=${this.appService.deviceId}, db=${this.appService.dbId}`);
-              this.loadAllDevices();
-              this.loadAllRoles();
-            } else {
-              console.log("No previous session to restore");
-            }
-          });
-      }
-    }, 1000);
   }
 
   async loadAllDevices() {
@@ -71,51 +56,31 @@ export class AppComponent {
   }
 
   loadConnectionString(importDB: string) {
-    if (!this.appService.deviceId) return;
-
     try {
-      const parsed = JSON.parse(importDB);
-      console.log('parsed = ', parsed);
-      if (parsed.deviceId !== this.appService.deviceId) {
-        console.log('device Id mismatch')
-        return;
-      }
-      this.appService.joinAsDevice(this.appService.deviceId, parsed.role,
-        parsed.dbId, this.reviveSecretBundle(parsed.secret), parsed.schema, parsed.creatorDeviceId);
+      this.appService.joinAsDeviceFromImport(importDB)
+        .then(ctx => {
+          console.log('Joined DB as device:', ctx);
+        })
+        .catch(err => {
+          console.error('Failed to join DB:', err);
+        });
+    } catch (err) {
+      console.error('Invalid connection string', err);
+    }
+    // if (!this.appService.selectedDBId) return;
 
-    } catch (err) { console.log(`${importDB} failed to load with error ${err}`) }
   }
 
-  generateDBConnectionKey(deviceId: string) {
+  async generateDBConnectionKey(deviceId: string) {
     this.dbConnectionKey = '';
-    console.log('this.appService.deviceId = ', this.appService.deviceId)
-    console.log('this.appService.dbId = ', this.appService.dbId)
-    if (!this.appService.deviceId || !this.appService.dbId) return;
+    this.dbConnectionKey = await this.appService.generateConnectionKey(deviceId);
 
-    const device = this.devices.find(d => d.deviceId === deviceId);
-
-    let secret: any = this.appService.loadSecretsFromLocalStorage(this.appService.dbId, this.appService.deviceId);
-    if (!secret) return;
-
-    secret = {
-      ...secret,
-      dekRaw: toB64(secret.dekRaw),
-      indexKeyRaw: toB64(secret.indexKeyRaw)
-    } as SecretBundle;
-    this.dbConnectionKey = JSON.stringify({
-      deviceId: deviceId,
-      dbId: this.appService.dbId,
-      role: device.role,
-      schema: this.schema,
-      secret,
-      creatorDeviceId: this.appService.deviceId
-    })
   }
 
   addDevice(deviceId: string, role: string) {
-    if (!deviceId || !role || !this.appService.dbId || !this.appService.cryptoMgr?.devicePubJwk) return;
+    if (!deviceId || !role) return;
 
-    this.appService.addDevice(deviceId, role, this.appService.cryptoMgr.devicePubJwk)
+    this.appService.addDevice(deviceId, role)
   }
 
   async searchTask(text: string) {

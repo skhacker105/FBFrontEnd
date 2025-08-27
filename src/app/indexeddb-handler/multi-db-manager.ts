@@ -3,7 +3,7 @@ import { CreatorHubSyncManager, CryptoManager, DBContext, DBListEntry, IndexedDB
 export class MultiDBManager {
     private static LS_KEY_DBS = 'multiDBManager_dbs';
     private static LS_KEY_DEVICE = 'multiDBManager_deviceId';
-    private static LS_KEY_SELECTED = 'multiDBManager_selectedDB';
+    private static LS_KEY_SELECTEDDB = 'multiDBManager_selectedDB';
 
     private dbContexts = new Map<string, DBContext>();
     private deviceId: string | null = null;
@@ -11,7 +11,7 @@ export class MultiDBManager {
 
     constructor() {
         this.deviceId = localStorage.getItem(MultiDBManager.LS_KEY_DEVICE);
-        this.selectedDbId = localStorage.getItem(MultiDBManager.LS_KEY_SELECTED);
+        this.selectedDbId = localStorage.getItem(MultiDBManager.LS_KEY_SELECTEDDB);
 
         const list = this.getDBList();
         list.forEach(entry => {
@@ -69,13 +69,13 @@ export class MultiDBManager {
 
     private reviveSecretBundle(raw: any): SecretBundle {
         return {
-          ...raw,
-          dekRaw: fromB64(raw.dekRaw),
-          indexKeyRaw: fromB64(raw.indexKeyRaw),
-          devicePubJwk: raw.devicePubJwk,   // stays as object
-          devicePrivJwk: raw.devicePrivJwk, // stays as object
+            ...raw,
+            dekRaw: fromB64(raw.dekRaw),
+            indexKeyRaw: fromB64(raw.indexKeyRaw),
+            devicePubJwk: raw.devicePubJwk,   // stays as object
+            devicePrivJwk: raw.devicePrivJwk, // stays as object
         };
-      }
+    }
 
     // ---------- DB list ----------
     private getDBList(): DBListEntry[] {
@@ -98,12 +98,12 @@ export class MultiDBManager {
     // ---------- Selected DB ----------
     selectDB(dbId: string) {
         this.selectedDbId = dbId;
-        localStorage.setItem(MultiDBManager.LS_KEY_SELECTED, dbId);
+        localStorage.setItem(MultiDBManager.LS_KEY_SELECTEDDB, dbId);
     }
 
     resetSelectedDB() {
         this.selectedDbId = null;
-        localStorage.removeItem(MultiDBManager.LS_KEY_SELECTED);
+        localStorage.removeItem(MultiDBManager.LS_KEY_SELECTEDDB);
     }
 
     getSelectedDB(): DBContext | null {
@@ -200,7 +200,35 @@ export class MultiDBManager {
         this.selectDB(dbId);
     }
 
-    async joinAsDevice(
+    async joinAsDeviceFromImport(importDB: string): Promise<void> {
+        let parsed: any;
+        try {
+            parsed = JSON.parse(importDB);
+        } catch (err) {
+            throw new Error(`Invalid connection string: ${err}`);
+        }
+
+        const {
+            deviceId,
+            dbId,
+            role,
+            schema,
+            secret,
+            creatorDeviceId
+        } = parsed;
+
+        if (!dbId || !role || !schema || !secret) {
+            throw new Error('Connection string missing required fields');
+        }
+
+        // Important: local deviceId always comes from this.deviceId, not the string
+        const revivedSecret = this.reviveSecretBundle(secret);
+
+        await this.joinAsDevice(dbId, role, revivedSecret, schema, creatorDeviceId);
+    }
+
+
+    private async joinAsDevice(
         dbId: string,
         role: string,
         cryptoSecret: SecretBundle,
@@ -243,48 +271,58 @@ export class MultiDBManager {
         this.selectDB(dbId);
     }
 
-    async generateConnectionKey(deviceId: string, dbId?: string): Promise<string> {
-        const { ctx, dbId: resolvedDbId } = this.resolveCtxSync(dbId);
-      
+    async generateConnectionKey(deviceId: string): Promise<string> {
+        if (!this.deviceId || !this.selectedDbId) throw new Error('No Device Id found.');
+
+        const { ctx, dbId: resolvedDbId } = this.resolveCtxSync(this.selectedDbId);
+
         // Load secrets for the current app device (not the target device)
-        const secret = this.loadSecrets(resolvedDbId, ctx.deviceId);
+        const secret = this.loadSecrets(resolvedDbId, this.deviceId);
         if (!secret) throw new Error('No secrets found in local storage');
-      
+
         const bundle = {
-          ...secret,
-          dekRaw: toB64(secret.dekRaw),
-          indexKeyRaw: toB64(secret.indexKeyRaw),
+            ...secret,
+            dekRaw: toB64(secret.dekRaw),
+            indexKeyRaw: toB64(secret.indexKeyRaw),
         };
-      
-        const device = await ctx.db.getDevice(deviceId); // ⚡ convenience, or await listDevices
+
+        const device = await ctx.db.getDevice(deviceId);
         if (!device) throw new Error(`Device ${deviceId} not found`);
-      
+
         const connectionKey = {
-          deviceId,
-          dbId: resolvedDbId,
-          role: device.role,
-          schema: ctx.schema,
-          secret: bundle,
-          creatorDeviceId: ctx.creatorDeviceId
+            deviceId,
+            dbId: resolvedDbId,
+            role: device.role,
+            schema: ctx.schema,
+            secret: bundle,
+            creatorDeviceId: ctx.creatorDeviceId
         };
-      
+
         return JSON.stringify(connectionKey);
-      }
+    }
 
     // ---------- Add Device ----------
-    async addDevice(dbId: string, newDeviceId: string, role: string, devicePubJwk: JsonWebKey) {
-        const ctx = this.dbContexts.get(dbId);
-        if (!ctx) throw new Error(`DB ${dbId} not loaded`);
+    async addDevice(newDeviceId: string, role: string) {
+        if (!this.selectedDbId || !this.deviceId) return;
+    
+        const ctx = this.dbContexts.get(this.selectedDbId);
+        if (!ctx) throw new Error(`DB ${this.selectedDbId} not loaded`);
         if (ctx.role !== ROLES.CREATOR) throw new Error('Only creator can add devices');
-
+    
+        // 🔑 Load secrets for the new device
+        const newDeviceSecrets = this.loadSecrets(this.selectedDbId, this.deviceId);
+        if (!newDeviceSecrets || !newDeviceSecrets.devicePubJwk) {
+            throw new Error(`No secrets found for device ${newDeviceId}`);
+        }
+    
         const grant: RoleGrant = await issueRoleGrant({
             cryptoManager: ctx.cryptoMgr,
-            dbId,
+            dbId: this.selectedDbId,
             deviceId: newDeviceId,
             role,
-            devicePubJwk
+            devicePubJwk: newDeviceSecrets.devicePubJwk
         });
-
+    
         await ctx.db.addOrUpdateDevice({ deviceId: newDeviceId, role, grant });
     }
 

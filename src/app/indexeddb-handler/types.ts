@@ -1,4 +1,5 @@
 import { ROLES } from './constants';
+import { CreatorHubSyncManager, CryptoManager, IndexedDBAbstraction } from './';
 
 export type Role = typeof ROLES[keyof typeof ROLES];
 
@@ -32,7 +33,7 @@ export interface RoleGrant {
     devicePubJwk: JsonWebKey;
     issuedAt: number;
     sig: string;
-}   
+}
 
 
 export type SecretBundle = {
@@ -43,3 +44,21 @@ export type SecretBundle = {
     dskPubJwk?: JsonWebKey | null;
     dskPrivJwk: JsonWebKey | null;
 };
+
+export interface DBContext {
+    dbId: string;
+    deviceId: string;
+    creatorDeviceId: string | null;
+    role: string;
+    schema: any;
+    db: IndexedDBAbstraction;
+    cryptoMgr: CryptoManager;
+    sync: CreatorHubSyncManager;
+    secrets: SecretBundle;
+}
+export interface DBListEntry {
+    dbId: string;
+    schema: any;
+    role: string;
+    creatorDeviceId: string | null;
+}

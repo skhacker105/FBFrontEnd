@@ -1,3 +1,4 @@
+export * from './multi-db-manager';
 export * from './constants';
 export * from './types';
 export * from './utils/basics';
