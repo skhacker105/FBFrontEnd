@@ -47,6 +47,7 @@ export class IndexedDBAbstraction {
         if (!db.objectStoreNames.contains('_peerSync')) db.createObjectStore('_peerSync', { keyPath: 'peerId' });
         if (!db.objectStoreNames.contains('_policies')) db.createObjectStore('_policies', { keyPath: 'store' });
 
+        // app stores
         const stores = this.schema?.stores || {};
         for (const [storeName, def] of Object.entries(stores)) {
           if (!db.objectStoreNames.contains(storeName)) {
@@ -138,7 +139,11 @@ export class IndexedDBAbstraction {
         for (const [storeName, def] of Object.entries(stores)) {
           if (!db.objectStoreNames.contains(storeName)) {
             const os = db.createObjectStore(storeName, { keyPath: def?.keyPath || 'id', autoIncrement: !!def?.autoIncrement });
+            
+            // normal indexes
             (def?.indexes || []).forEach((idx) => os.createIndex(idx.name, idx.keyPath, idx.options || {}));
+
+            // secure-index: add multiEntry index for each field
             (def?.secureIndex || []).forEach((field) => {
               const idxName = `sidx_${field}`;
               os.createIndex(idxName, field, { unique: false, multiEntry: true });
