@@ -13,6 +13,12 @@ export class CreatorHubSyncManager extends SyncManager {
     private syncing = false;
     private creatorDeviceId: string | null;
 
+    private async sendToDeviceList() {
+        return this.mode === 'device'
+            ? [{ deviceId: this.creatorDeviceId }]
+            : (await this.db.listDevices()).filter(d => d.deviceId != this.db.deviceId)
+    }
+
     constructor(opts: {
         db: IndexedDBAbstraction;
         cryptoManager: CryptoManager;
@@ -48,12 +54,11 @@ export class CreatorHubSyncManager extends SyncManager {
         this.db.on('local-change', async (ev: any) => {
             if (!this.syncing) {
                 const change = ev.detail || ev; // CustomEvent or raw
-                const devices = this.mode === 'device'
-                    ? [{deviceId: this.creatorDeviceId}]
-                    : (await this.db.listDevices()).filter(d => d.deviceId)
+                const devices = await this.sendToDeviceList();
                 console.log('[CreatorHubSyncManager] Local change → sending', change);
 
-                for(let device of devices) {
+                console.log('sending update to devices', devices);
+                for (let device of devices) {
                     this.transport.send({
                         type: 'sync-data-update',
                         dbId: this.db.dbId,
@@ -62,7 +67,7 @@ export class CreatorHubSyncManager extends SyncManager {
                         change
                     });
                 }
-                
+
             }
         });
 
@@ -120,7 +125,6 @@ export class CreatorHubSyncManager extends SyncManager {
             const snapshot = await this.db.exportCipherSnapshot();
 
             // stream all rows
-            console.log('snapshot = ', snapshot)
             const upsertLookup: any = {
                 '_devices': 'device_upsert',
                 '_roles': 'role_upsert',
@@ -187,6 +191,20 @@ export class CreatorHubSyncManager extends SyncManager {
             this.lastAppliedLamport = lamport;
             await this.db.setPeerSyncState(this._peerKey(), this.lastAppliedLamport);
             console.log('[CreatorHubSyncManager] Updated lamport →', this.lastAppliedLamport);
+        }
+
+        if (this.mode === 'creator') {
+            const devices = await this.sendToDeviceList();
+            console.log('sending update to devices', devices);
+            for (let device of devices) {
+                this.transport.send({
+                    type: 'sync-data-update',
+                    dbId: this.db.dbId,
+                    toDeviceId: device.deviceId,
+                    fromDeviceId: this.db.deviceId,
+                    change
+                });
+            }
         }
     }
 }
