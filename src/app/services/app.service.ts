@@ -8,7 +8,9 @@ import {
   SecretBundle,
   WebSocketTransport,
   bootstrapSecrets,
-  issueRoleGrant
+  fromB64,
+  issueRoleGrant,
+  toB64
 } from '../indexeddb-handler';
 
 @Injectable({
@@ -248,10 +250,10 @@ export class AppService {
 }
 
 // ---------- Utility ----------
-export function toB64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
-}
+// export function toB64(bytes: Uint8Array): string {
+//   return btoa(String.fromCharCode(...bytes));
+// }
 
-export function fromB64(s: string): Uint8Array {
-  return new Uint8Array([...atob(s)].map(c => c.charCodeAt(0)));
-}
+// export function fromB64(s: string): Uint8Array {
+//   return new Uint8Array([...atob(s)].map(c => c.charCodeAt(0)));
+// }

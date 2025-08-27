@@ -1,6 +1,5 @@
 import { CryptoManager } from '../crypto/CryptoManager';
 import { RoleGrant } from '../types';
-import { utf8, b64, signBytes } from '../utils/crypto-helpers';
 
 export async function issueRoleGrant(opts: {
   cryptoManager: CryptoManager;

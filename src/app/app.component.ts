@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
-import { AppService, fromB64, toB64 } from './services/app.service';
-import { SecretBundle } from './indexeddb-handler';
+import { AppService } from './services/app.service';
+import { SecretBundle, fromB64, toB64 } from './indexeddb-handler';
 
 @Component({
   selector: 'app-root',

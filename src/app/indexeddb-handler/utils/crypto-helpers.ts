@@ -1,10 +1,10 @@
 export function utf8(str: string) { return new TextEncoder().encode(str); }
 
-export function b64(bytes: Uint8Array) {
+export function toB64(bytes: Uint8Array): string {
     return btoa(String.fromCharCode(...bytes));
 }
 
-export function fromB64(s: string) {
+export function fromB64(s: string): Uint8Array {
     return new Uint8Array([...atob(s)].map(c => c.charCodeAt(0)));
 }
 

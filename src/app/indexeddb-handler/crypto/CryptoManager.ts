@@ -1,8 +1,8 @@
 import { SecretBundle } from '../types';
 import { ngrams } from '../utils/text';
 import {
-    utf8, b64, fromB64, importAesKey, exportRawKey, genAesKey, genSigningKeyPair,
-    signBytes, verifyBytes, importPubJwk, importPrivJwk, hmacKeyFromRaw, hmacDigest
+    utf8, fromB64, importAesKey, exportRawKey, genAesKey, genSigningKeyPair,
+    signBytes, verifyBytes, importPubJwk, importPrivJwk, hmacKeyFromRaw, hmacDigest, toB64
 } from '../utils/crypto-helpers';
 
 export async function bootstrapSecrets(dbId: string, deviceId: string, isCreator = false): Promise<SecretBundle> {
@@ -78,7 +78,7 @@ export class CryptoManager {
       const ct = new Uint8Array(
         await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this.dek, utf8(JSON.stringify(obj)))
       );
-      return { iv: b64(iv), ct: b64(ct) };
+      return { iv: toB64(iv), ct: toB64(ct) };
     }
   
     async decryptJson(payload: { iv: string; ct: string } | null) {
@@ -93,13 +93,13 @@ export class CryptoManager {
       await this.ready;
       const toks = ngrams(str, n);
       const out: string[] = [];
-      for (const t of toks) out.push(b64(await hmacDigest(this.indexKey, utf8(t))));
+      for (const t of toks) out.push(toB64(await hmacDigest(this.indexKey, utf8(t))));
       return out;
     }
   
     async sign(obj: any) {
       await this.ready;
-      return b64(await signBytes(this.devicePriv, utf8(JSON.stringify(obj))));
+      return toB64(await signBytes(this.devicePriv, utf8(JSON.stringify(obj))));
     }
   
     async verifyWithDSKSignature(sigB64: string, obj: any) {
@@ -117,6 +117,6 @@ export class CryptoManager {
     async signWithDSK(obj: any): Promise<string> {
       await this.ready;
       if (!this.dskPriv) throw new Error('DSK private key not available on this device');
-      return b64(await signBytes(this.dskPriv, utf8(JSON.stringify(obj))));
+      return toB64(await signBytes(this.dskPriv, utf8(JSON.stringify(obj))));
     }
   }
